@@ -1,10 +1,8 @@
 const { GoogleGenAI } = require('@google/genai')
 const { z } = require('zod')
 const { zodToJsonSchema } = require('zod-to-json-schema')
-const puppeteer = require('puppeteer-core')
-const chromium = require('@sparticuz/chromium')
+const puppeteer = require('puppeteer')
 
-// Initialize Google Gen AI client with the environment API key
 const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GENAI_API_KEY })
 
 const interviewReportSchema = z.object({
@@ -31,6 +29,27 @@ const interviewReportSchema = z.object({
     title: z.string().describe("The title of the job for which the interview report is generated")
 })
 
+// Helper function with retry logic for Gemini API calls to handle 503 high demand spikes
+async function callGeminiWithRetry(prompt, responseSchema, retries = 3, delay = 2000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: prompt,
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: responseSchema
+                }
+            })
+            return response
+        } catch (error) {
+            console.warn(`Attempt ${i + 1} failed. Retrying... Error:`, error.message)
+            if (i === retries - 1) throw error
+            await new Promise(resolve => setTimeout(resolve, delay * (i + 1)))
+        }
+    }
+}
+
 async function generateInterviewReport({ resume, selfDescription, jobDescription }) {
     const prompt = `Generate an interview report for a candidate with the following details:
         Resume: ${resume || "Not provided"}
@@ -38,24 +57,15 @@ async function generateInterviewReport({ resume, selfDescription, jobDescription
         Job Description: ${jobDescription}
     `
 
-    const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: zodToJsonSchema(interviewReportSchema)
-        }
-    })
-
+    const response = await callGeminiWithRetry(prompt, zodToJsonSchema(interviewReportSchema))
     return JSON.parse(response.text)
 }
 
 async function generatePdfFromHtml(htmlContent) {
     const browser = await puppeteer.launch({
-        args: chromium.args,
-        defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath(),
-        headless: chromium.headless,
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
     })
     
     try {
@@ -94,15 +104,7 @@ async function generateResumePdf({ resume, jobDescription, selfDescription }) {
         The resume must be visually polished, 1 page long, and tailored directly to the target role.
     `
 
-    const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: zodToJsonSchema(resumePdfSchema)
-        }
-    })
-
+    const response = await callGeminiWithRetry(prompt, zodToJsonSchema(resumePdfSchema))
     const jsonContent = JSON.parse(response.text)
     return await generatePdfFromHtml(jsonContent.html)
 }
