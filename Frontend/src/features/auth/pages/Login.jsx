@@ -36,9 +36,12 @@ const Login = () => {
 
     if (loading) {
         return (
-            <main>
-                <h1>Loading.....</h1>
-            </main>
+            <div className="flex items-center justify-center min-h-screen bg-slate-950 text-white">
+              <div className="flex flex-col items-center p-8 rounded-2xl bg-slate-900/60 backdrop-blur-md border border-slate-800 shadow-2xl">
+                <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-slate-300 font-medium tracking-wide">Loading your workspace...</p>
+              </div>
+            </div>
         )
     }
 
