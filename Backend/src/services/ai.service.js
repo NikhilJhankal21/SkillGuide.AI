@@ -29,12 +29,12 @@ const interviewReportSchema = z.object({
     title: z.string().describe("The title of the job for which the interview report is generated")
 })
 
-// Helper function with retry logic for Gemini API calls to handle 503 high demand spikes
-async function callGeminiWithRetry(prompt, responseSchema, retries = 3, delay = 2000) {
+// Helper function with retry logic for 503 high demand errors on gemini-3.6-flash
+async function callGeminiWithRetry(prompt, responseSchema, retries = 4, delay = 3000) {
     for (let i = 0; i < retries; i++) {
         try {
             const response = await ai.models.generateContent({
-                model: "gemini-2.5-flash",
+                model: "gemini-3.6-flash",
                 contents: prompt,
                 config: {
                     responseMimeType: "application/json",
