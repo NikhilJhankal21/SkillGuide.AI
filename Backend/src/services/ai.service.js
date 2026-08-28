@@ -29,7 +29,6 @@ const interviewReportSchema = z.object({
     title: z.string().describe("The title of the job for which the interview report is generated")
 })
 
-// Helper function with retry logic for 503 high demand errors on gemini-3.6-flash
 async function callGeminiWithRetry(prompt, responseSchema, retries = 4, delay = 3000) {
     for (let i = 0; i < retries; i++) {
         try {
@@ -56,7 +55,6 @@ async function generateInterviewReport({ resume, selfDescription, jobDescription
         Self Description: ${selfDescription || "Not provided"}
         Job Description: ${jobDescription}
     `
-
     const response = await callGeminiWithRetry(prompt, zodToJsonSchema(interviewReportSchema))
     return JSON.parse(response.text)
 }
