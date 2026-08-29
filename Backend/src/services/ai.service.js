@@ -38,39 +38,63 @@ const interviewReportSchema = z.object({
 })
 
 
-async function callGeminiWithRetry(prompt, responseSchema, retries = 4, delay = 3000) {
+// Models tried in order — if one keeps failing (quota exceeded, high demand,
+// etc.), we automatically fall through to the next one. Each model has its
+// own separate quota, so this greatly reduces total failures.
+const MODELS = [
+    "gemini-3.6-flash",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash"
+]
 
-    for (let i = 0; i < retries; i++) {
+async function callGeminiWithRetry(prompt, responseSchema, retriesPerModel = 2, delay = 3000) {
 
-        try {
+    let lastError = null
 
-            const response = await ai.models.generateContent({
-                model: "gemini-3.6-flash",
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: responseSchema
+    for (const model of MODELS) {
+
+        for (let i = 0; i < retriesPerModel; i++) {
+
+            try {
+
+                console.log(`[Gemini] Trying model "${model}", attempt ${i + 1}/${retriesPerModel}...`)
+
+                const response = await ai.models.generateContent({
+                    model,
+                    contents: prompt,
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: responseSchema
+                    }
+                })
+
+                console.log(`[Gemini] Success with model "${model}".`)
+
+                return response
+
+            } catch (error) {
+
+                lastError = error
+
+                console.warn(
+                    `[Gemini] Model "${model}" attempt ${i + 1} failed. Error:`,
+                    error.message
+                )
+
+                const isLastAttemptForModel = i === retriesPerModel - 1
+
+                if (!isLastAttemptForModel) {
+                    await new Promise(resolve =>
+                        setTimeout(resolve, delay * (i + 1))
+                    )
                 }
-            })
-
-            return response
-
-        } catch (error) {
-
-            console.warn(
-                `Attempt ${i + 1} failed. Retrying... Error:`,
-                error.message
-            )
-
-            if (i === retries - 1) {
-                throw error
             }
-
-            await new Promise(resolve =>
-                setTimeout(resolve, delay * (i + 1))
-            )
         }
+
+        console.log(`[Gemini] All attempts exhausted for "${model}". Trying next model...`)
     }
+
+    throw new Error(`All Gemini models failed. Last error: ${lastError?.message}`)
 }
 
 
