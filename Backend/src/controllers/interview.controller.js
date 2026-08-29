@@ -1,14 +1,23 @@
 const { PDFParse } = require('pdf-parse')
-const { generateInterviewReport, generateResumePdf } = require('../services/ai.service')
+const {
+    generateInterviewReport,
+    generateResumePdf
+} = require('../services/ai.service')
+
 const interviewReportModel = require('../models/interviewReport.model')
+
 
 /**
  * @description Controller to generate interview report based on user self description, resume and job description.
  */
 async function generateInterviewReportController(req, res) {
+
     try {
+
         if (!req.file) {
-            return res.status(400).json({ message: "Resume PDF file is required." });
+            return res.status(400).json({
+                message: "Resume PDF file is required."
+            })
         }
 
         const parser = new PDFParse({
@@ -16,13 +25,20 @@ async function generateInterviewReportController(req, res) {
         })
 
         const result = await parser.getText()
+
         const resumeContent = result.text
+
         await parser.destroy()
 
-        const { selfDescription, jobDescription } = req.body
+        const {
+            selfDescription,
+            jobDescription
+        } = req.body
 
         if (!jobDescription) {
-            return res.status(400).json({ message: "Job description is required." });
+            return res.status(400).json({
+                message: "Job description is required."
+            })
         }
 
         const interviewReportByAi = await generateInterviewReport({
@@ -31,8 +47,7 @@ async function generateInterviewReportController(req, res) {
             jobDescription
         })
 
-        // Ensure user ID is correctly picked up from req.user
-        const userId = req.user._id || req.user.id;
+        const userId = req.user._id || req.user.id
 
         const interviewReport = await interviewReportModel.create({
             user: userId,
@@ -46,19 +61,31 @@ async function generateInterviewReportController(req, res) {
             message: "Interview report generated successfully",
             interviewReport
         })
+
     } catch (error) {
-        console.error("[Controller Error] generateInterviewReport:", error);
-        res.status(500).json({ message: error.message || "Internal server error" });
+
+        console.error(
+            "[Controller Error] generateInterviewReport:",
+            error
+        )
+
+        res.status(500).json({
+            message: error.message || "Internal server error"
+        })
     }
 }
+
 
 /**
  * @description Controller to get interview report by interviewId.
  */
 async function getInterviewReportByIdController(req, res) {
+
     try {
+
         const { interviewId } = req.params
-        const userId = req.user._id || req.user.id;
+
+        const userId = req.user._id || req.user.id
 
         const interviewReport = await interviewReportModel.findOne({
             _id: interviewId,
@@ -75,40 +102,66 @@ async function getInterviewReportByIdController(req, res) {
             message: "Interview report fetched successfully.",
             interviewReport
         })
+
     } catch (error) {
-        console.error("[Controller Error] getInterviewReportById:", error);
-        res.status(500).json({ message: error.message || "Internal server error" });
+
+        console.error(
+            "[Controller Error] getInterviewReportById:",
+            error
+        )
+
+        res.status(500).json({
+            message: error.message || "Internal server error"
+        })
     }
 }
+
 
 /**
  * @description Controller to get all interview reports of logged in user.
  */
 async function getAllInterviewReportsController(req, res) {
-    try {
-        const userId = req.user._id || req.user.id;
 
-        const interviewReports = await interviewReportModel.find({ user: userId })
+    try {
+
+        const userId = req.user._id || req.user.id
+
+        const interviewReports = await interviewReportModel
+            .find({ user: userId })
             .sort({ createdAt: -1 })
-            .select("-resume -selfDescription -jobDescription -__v -technicalQuestions -behavioralQuestions -skillGaps -preparationPlan")
+            .select(
+                "-resume -selfDescription -jobDescription -__v -technicalQuestions -behavioralQuestions -skillGaps -preparationPlan"
+            )
 
         res.status(200).json({
             message: "Interview reports fetched successfully.",
             interviewReports
         })
+
     } catch (error) {
-        console.error("[Controller Error] getAllInterviewReports:", error);
-        res.status(500).json({ message: error.message || "Internal server error" });
+
+        console.error(
+            "[Controller Error] getAllInterviewReports:",
+            error
+        )
+
+        res.status(500).json({
+            message: error.message || "Internal server error"
+        })
     }
 }
+
 
 /**
  * @description Controller to generate resume PDF based on user self description, resume and job description.
  */
 async function generateResumePdfController(req, res) {
+
     try {
+
         const { interviewReportId } = req.params
-        const userId = req.user._id || req.user.id;
+
+        const userId = req.user._id || req.user.id
 
         const interviewReport = await interviewReportModel.findOne({
             _id: interviewReportId,
@@ -121,9 +174,24 @@ async function generateResumePdfController(req, res) {
             })
         }
 
-        const { resume, jobDescription, selfDescription } = interviewReport
+        const {
+            resume,
+            jobDescription,
+            selfDescription
+        } = interviewReport
 
-        const pdfBuffer = await generateResumePdf({ resume, jobDescription, selfDescription })
+        console.log(
+            "[Resume PDF] Generating PDF for report:",
+            interviewReportId
+        )
+
+        const pdfBuffer = await generateResumePdf({
+            resume,
+            jobDescription,
+            selfDescription
+        })
+
+        console.log("[Resume PDF] PDF generated.")
 
         res.set({
             "Content-Type": "application/pdf",
@@ -131,11 +199,20 @@ async function generateResumePdfController(req, res) {
         })
 
         res.send(pdfBuffer)
+
     } catch (error) {
-        console.error("[Controller Error] generateResumePdf:", error);
-        res.status(500).json({ message: error.message || "Internal server error" });
+
+        console.error(
+            "[Controller Error] generateResumePdf:",
+            error
+        )
+
+        res.status(500).json({
+            message: error.message || "Internal server error"
+        })
     }
 }
+
 
 module.exports = {
     generateInterviewReportController,
