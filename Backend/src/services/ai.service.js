@@ -38,63 +38,58 @@ const interviewReportSchema = z.object({
 })
 
 
-// Models tried in order — if one keeps failing (quota exceeded, high demand,
-// etc.), we automatically fall through to the next one. Each model has its
-// own separate quota, so this greatly reduces total failures.
-const MODELS = [
-    "gemini-3.6-flash",
-    "gemini-2.5-flash",
-    "gemini-2.0-flash"
-]
+// NOTE: As of Aug 2026, gemini-2.5-flash and gemini-2.0-flash have been
+// retired by Google ("no longer available to new users"). Only
+// gemini-3.6-flash is current. So instead of falling back to other
+// (now-invalid) models, we just retry this one model more patiently —
+// 503 "high demand" errors are usually temporary and resolve within
+// a minute or two.
+const MODEL = "gemini-3.6-flash"
 
-async function callGeminiWithRetry(prompt, responseSchema, retriesPerModel = 2, delay = 3000) {
+async function callGeminiWithRetry(prompt, responseSchema, retries = 5, delay = 4000) {
 
     let lastError = null
 
-    for (const model of MODELS) {
+    for (let i = 0; i < retries; i++) {
 
-        for (let i = 0; i < retriesPerModel; i++) {
+        try {
 
-            try {
+            console.log(`[Gemini] Attempt ${i + 1}/${retries} using "${MODEL}"...`)
 
-                console.log(`[Gemini] Trying model "${model}", attempt ${i + 1}/${retriesPerModel}...`)
-
-                const response = await ai.models.generateContent({
-                    model,
-                    contents: prompt,
-                    config: {
-                        responseMimeType: "application/json",
-                        responseSchema: responseSchema
-                    }
-                })
-
-                console.log(`[Gemini] Success with model "${model}".`)
-
-                return response
-
-            } catch (error) {
-
-                lastError = error
-
-                console.warn(
-                    `[Gemini] Model "${model}" attempt ${i + 1} failed. Error:`,
-                    error.message
-                )
-
-                const isLastAttemptForModel = i === retriesPerModel - 1
-
-                if (!isLastAttemptForModel) {
-                    await new Promise(resolve =>
-                        setTimeout(resolve, delay * (i + 1))
-                    )
+            const response = await ai.models.generateContent({
+                model: MODEL,
+                contents: prompt,
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: responseSchema
                 }
+            })
+
+            console.log(`[Gemini] Success on attempt ${i + 1}.`)
+
+            return response
+
+        } catch (error) {
+
+            lastError = error
+
+            console.warn(
+                `[Gemini] Attempt ${i + 1} failed. Error:`,
+                error.message
+            )
+
+            if (i === retries - 1) {
+                throw error
             }
+
+            // Exponential backoff: 4s, 8s, 12s, 16s...
+            const waitTime = delay * (i + 1)
+            console.log(`[Gemini] Retrying in ${waitTime}ms...`)
+            await new Promise(resolve =>
+                setTimeout(resolve, waitTime)
+            )
         }
-
-        console.log(`[Gemini] All attempts exhausted for "${model}". Trying next model...`)
     }
-
-    throw new Error(`All Gemini models failed. Last error: ${lastError?.message}`)
 }
 
 
